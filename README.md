@@ -1,4 +1,4 @@
-# threejs-study-room
+# WebGL 自学室
 
 ## 斯坦福兔子
 
