@@ -265,3 +265,9 @@ const Blur = () => {
 }
 
 export default Blur
+
+export async function getStaticProps() {
+    return {
+        props: { }
+    }
+}
