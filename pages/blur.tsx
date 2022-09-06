@@ -1,5 +1,6 @@
-import {useEffect, useRef} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {mat4} from 'gl-matrix'
+import { Slider } from 'antd';
 
 const vsSource = `
     attribute vec4 aVertexPosition;
@@ -17,12 +18,40 @@ const vsSource = `
 `
 
 const fsSource = `
+    precision highp float;
+
     varying highp vec2 vTextureCoord;
+
+    uniform float tex_offset;
 
     uniform sampler2D uSampler;
 
     void main() {
-        gl_FragColor = texture2D(uSampler, vTextureCoord);
+        vec4 orColor = texture2D(uSampler, vTextureCoord);
+        const float PI = 3.1415926535897932384626433832795;
+        // const float tex_offset = 0.01;
+        const float degree = 1.0;
+        float w = 1.0 / degree;
+        float temWeight[3];
+        temWeight[0] = (1.0 / (2.0 * PI * w * w));
+        temWeight[1] = (1.0/(2.0 * PI * w * w)) * exp(-1.0 * w * w);
+        temWeight[2] = (1.0/(2.0 * PI * w * w)) * exp(-2.0 * w * w);
+        float total = temWeight[0] + temWeight[1] * 4.0 + temWeight[2] * 4.0;
+        float orAlpha=orColor.a;
+        float weight[3];
+        weight[0] = temWeight[0] / total;
+        weight[1] = temWeight[1] / total;
+        weight[2] = temWeight[2] / total;
+        vec4 color = texture2D(uSampler, vTextureCoord + tex_offset * vec2(0, 0)) * weight[0]
+            + texture2D(uSampler, vTextureCoord + tex_offset * vec2(0, -1)) * weight[1]
+            + texture2D(uSampler, vTextureCoord + tex_offset * vec2(1, 0)) * weight[1]
+            + texture2D(uSampler, vTextureCoord + tex_offset * vec2(-1, 0)) * weight[1]
+            + texture2D(uSampler, vTextureCoord + tex_offset * vec2(1, 0)) * weight[1] 
+            + texture2D(uSampler, vTextureCoord + tex_offset * vec2(1, 1)) * weight[2]
+            + texture2D(uSampler, vTextureCoord + tex_offset * vec2(-1, 1)) * weight[2]
+            + texture2D(uSampler, vTextureCoord + tex_offset * vec2(1, -1)) * weight[2]
+            + texture2D(uSampler, vTextureCoord + tex_offset * vec2(-1, -1)) * weight[2];
+        gl_FragColor = vec4(color.rgb, orAlpha);
     }
 `
 
@@ -105,7 +134,7 @@ function initBuffers(gl: WebGLRenderingContext) {
     }
 }
 
-function drawScene(gl: WebGLRenderingContext, texture: WebGLTexture) {
+function drawScene(gl: WebGLRenderingContext, texture: WebGLTexture, offset: number) {
     const shaderProgram = initShaderProgram(gl, vsSource, fsSource)
 
     if (!shaderProgram) {
@@ -115,6 +144,7 @@ function drawScene(gl: WebGLRenderingContext, texture: WebGLTexture) {
     const vertexPositionLocation = gl.getAttribLocation(shaderProgram, 'aVertexPosition')
     const projectionMatrixLocation = gl.getUniformLocation(shaderProgram, 'uProjectionMatrix')
     const modelViewMatrixLocation = gl.getUniformLocation(shaderProgram, 'uModelViewMatrix')
+    const texOffsetLocation = gl.getUniformLocation(shaderProgram, 'tex_offset')
 
     gl.clearColor(0.0, 0.0, 0.0, 1.0)
     gl.clearDepth(1.0)
@@ -156,6 +186,7 @@ function drawScene(gl: WebGLRenderingContext, texture: WebGLTexture) {
     // 设置着色器的 uniform 变量
     gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix)
     gl.uniformMatrix4fv(modelViewMatrixLocation, false, modelViewMatrix)
+    gl.uniform1f(texOffsetLocation, offset)
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 }
@@ -202,6 +233,8 @@ function loadTexture(gl: WebGLRenderingContext, url: string): WebGLTexture | nul
 }
 
 const Blur = () => {
+    const offset = useRef(0)
+
     const canvasEl = useRef<HTMLCanvasElement>(null)
 
     useEffect(() => {
@@ -215,16 +248,19 @@ const Blur = () => {
         }
         const texture = loadTexture(gl, "cubetexture.png")
         function render() {
-            drawScene(gl!, texture!)
+            drawScene(gl!, texture!, offset.current / 100)
             requestAnimationFrame(render)
         }
         requestAnimationFrame(render)
     }, [])
 
     return (
-        <canvas ref={canvasEl} width="640" height="480">
-            你的浏览器似乎不支持或者禁用了 HTML5 <code>&lt;canvas&gt;</code> 元素。
-        </canvas>
+        <>
+            <canvas ref={canvasEl} width="640" height="480">
+                你的浏览器似乎不支持或者禁用了 HTML5 <code>&lt;canvas&gt;</code> 元素。
+            </canvas>
+            <Slider onChange={value => offset.current = value} />
+        </>
     )
 }
 
